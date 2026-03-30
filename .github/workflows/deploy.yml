@@ -1,4 +1,4 @@
-name: Deploy Tomcat CI-CD
+name: CI/CD Tomcat Deployment
 
 on:
   push:
@@ -6,20 +6,42 @@ on:
       - main
 
 jobs:
-  deploy:
-    runs-on: self-hosted
+  build_and_deploy:
+    runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Checkout repository
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Copy to Control Node
-        run: |
-          scp -r . ansible@CONTROL_NODE_IP:/home/ansible/app
+      # Step 2: Set up Java
+      - name: Set up Java 11
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '11'
 
-      - name: Run Ansible Playbook
+      # Step 3: Install Maven
+      - name: Install Maven
+        run: sudo apt-get update && sudo apt-get install maven -y
+
+      # Step 4: Build WAR file
+      - name: Build WAR
+        run: mvn clean package
+
+      # Step 5: Copy files to Control Node
+      - name: Copy files to Control Node
         run: |
-          ssh ansible@CONTROL_NODE_IP << 'EOF'
+          scp -o StrictHostKeyChecking=no -r . ansible@CONTROL_NODE_IP:/home/ansible/app
+        env:
+          ANSIBLE_SSH_PRIVATE_KEY: ${{ secrets.CONTROL_NODE_KEY }}
+
+      # Step 6: Run Ansible Playbook on Control Node
+      - name: Deploy with Ansible
+        run: |
+          ssh -o StrictHostKeyChecking=no ansible@CONTROL_NODE_IP << 'EOF'
           cd /home/ansible/app
           ansible-playbook -i inventory.ini deploy.yml
           EOF
+        env:
+          ANSIBLE_SSH_PRIVATE_KEY: ${{ secrets.CONTROL_NODE_KEY }}
