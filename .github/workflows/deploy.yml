@@ -10,78 +10,76 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout code
-      - name: Checkout repository
-        uses: actions/checkout@v3
+    # Step 1: Checkout repository
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-      # Step 2: Set up Java 11
-      - name: Set up Java 11
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '11'
+    # Step 2: Set up Java 11
+    - name: Set up Java 11
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin'
+        java-version: '11'
 
-      # Step 3: Install Maven and Docker
-      - name: Install Maven and Docker
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y maven docker.io
+    # Step 3: Install Maven and Docker (fixed)
+    - name: Install Maven and Docker
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y maven apt-transport-https ca-certificates curl software-properties-common lsb-release gnupg
+        # Docker GPG key and repo
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        sudo apt-get update
+        sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+        docker --version
+        mvn -version
 
-      # Step 4: Build WAR file
-      - name: Build WAR
-        run: |
-          mvn clean package
-          echo "Listing target folder:"
-          ls -l target/
+    # Step 4: Build WAR file
+    - name: Build WAR
+      run: mvn clean package
 
-      # Step 5: Build Docker image
-      - name: Build Docker image
-        run: |
-          WAR_FILE=$(ls target/*.war | head -n 1)
-          if [ -z "$WAR_FILE" ]; then
-            echo "WAR file not found! Exiting."
-            exit 1
-          fi
-          echo "Using WAR file: $WAR_FILE"
-          docker build --build-arg WAR_FILE="$WAR_FILE" -t mytomcat:latest .
+    # Step 5: Build Docker image
+    - name: Build Docker image
+      run: docker build -t mytomcat:latest .
 
-      # Step 6: Docker login
-      - name: Docker login
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+    # Step 6: Login to Docker Hub
+    - name: Docker login
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Step 7: Push Docker image to Docker Hub
-      - name: Push Docker image
-        run: |
-          docker tag mytomcat:latest ${{ secrets.DOCKER_USERNAME }}/mytomcat:latest
-          docker push ${{ secrets.DOCKER_USERNAME }}/mytomcat:latest
+    # Step 7: Push Docker image to Docker Hub
+    - name: Push Docker image
+      run: |
+        docker tag mytomcat:latest ${{ secrets.DOCKER_USERNAME }}/mytomcat:latest
+        docker push ${{ secrets.DOCKER_USERNAME }}/mytomcat:latest
 
-      # Step 8: Setup SSH key for EC2
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H ${{ secrets.EC2_IP }} >> ~/.ssh/known_hosts
+    # Step 8: Setup SSH key for EC2
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        ssh-keyscan -H ${{ secrets.EC2_IP }} >> ~/.ssh/known_hosts
 
-      # Step 9: Copy Ansible playbook to EC2
-      - name: Copy playbook to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_IP }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "main/src/deploy.yml"
-          target: "/home/${{ secrets.EC2_USER }}/deploy.yml"
+    # Step 9: Copy Ansible playbook to EC2
+    - name: Copy playbook to EC2
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.DOCKER_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        source: "main/src/deploy.yml"
+        target: "/etc/ansible/hosts"
+        strip_components: 1
 
-      # Step 10: Run Ansible playbook on EC2
-      - name: Run Ansible playbook
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_IP }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            ansible-playbook /home/${{ secrets.EC2_USER }}/deploy.yml
+    # Step 10: Run Ansible playbook on EC2
+    - name: Deploy via Ansible
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.DOCKER_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          ansible-playbook /etc/ansible/deploy.yml
