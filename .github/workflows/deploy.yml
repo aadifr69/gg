@@ -10,8 +10,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout code
-      - name: Checkout repository
+      # Step 1: Checkout the repository
+      - name: Checkout code
         uses: actions/checkout@v3
 
       # Step 2: Set up Java 11
@@ -21,11 +21,28 @@ jobs:
           distribution: 'temurin'
           java-version: '11'
 
-      # Step 3: Install Maven + Docker
-      - name: Install Maven and Docker
-        run: sudo apt-get update && sudo apt-get install -y maven docker.io
+      # Step 3: Install Maven and Docker CE
+      - name: Install Maven and Docker CE
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y maven curl gnupg lsb-release
+          
+          # Add Docker official GPG key
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+          
+          # Add Docker repository
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] \
+          https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          
+          # Install Docker CE
+          sudo apt-get update
+          sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+          
+          # Enable and start Docker
+          sudo systemctl enable docker
+          sudo systemctl start docker
 
-      # Step 4: Build WAR file
+      # Step 4: Build the WAR file
       - name: Build WAR
         run: mvn clean package
 
@@ -33,7 +50,7 @@ jobs:
       - name: Build Docker image
         run: docker build -t mytomcat:latest .
 
-      # Step 6: Login to Docker Hub
+      # Step 6: Docker Hub login
       - name: Docker login
         uses: docker/login-action@v2
         with:
@@ -46,7 +63,7 @@ jobs:
           docker tag mytomcat:latest ${{ secrets.DOCKER_USERNAME }}/mytomcat:latest
           docker push ${{ secrets.DOCKER_USERNAME }}/mytomcat:latest
 
-      # Step 8: Setup SSH key for EC2
+      # Step 8: Set up SSH key for EC2
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
@@ -54,14 +71,14 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.EC2_IP }} >> ~/.ssh/known_hosts
 
-      # Step 9: Copy playbook and files to EC2
-      - name: Copy playbook to EC2
+      # Step 9: Copy Ansible playbook and inventory to EC2
+      - name: Copy Ansible files to EC2
         run: |
           scp -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no deploy.yml ansible@${{ secrets.EC2_IP }}:/home/ansible/
           scp -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no inventory.ini ansible@${{ secrets.EC2_IP }}:/home/ansible/
 
       # Step 10: Run Ansible playbook on EC2
-      - name: Run Ansible on EC2
+      - name: Run Ansible playbook on EC2
         run: |
           ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no ansible@${{ secrets.EC2_IP }} << 'EOF'
           cd /home/ansible
