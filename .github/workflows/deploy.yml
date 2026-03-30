@@ -34,7 +34,7 @@ jobs:
         run: |
           scp -o StrictHostKeyChecking=no -r . ansible@52.12.100.223:/home/ansible/app
         env:
-          ANSIBLE_SSH_PRIVATE_KEY: ${{ secrets.CONTROL_NODE_KEY }}
+          ANSIBLE_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
 
       # Step 6: Run Ansible Playbook on Control Node
       - name: Deploy with Ansible
