@@ -1,47 +1,42 @@
-name: CI/CD Tomcat Deployment
+- name: Deploy Tomcat Docker
+  hosts: managed
+  become: yes
 
-on:
-  push:
-    branches:
-      - main
+  tasks:
+    - name: Install Docker
+      yum:
+        name: docker
+        state: present
 
-jobs:
-  build_and_deploy:
-    runs-on: ubuntu-latest
+    - name: Start Docker service
+      service:
+        name: docker
+        state: started
+        enabled: true
 
-    steps:
-      # Step 1: Checkout repository
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - name: Create app directory
+      file:
+        path: /home/ansible/app
+        state: directory
 
-      # Step 2: Set up Java
-      - name: Set up Java 11
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '11'
+    - name: Copy Dockerfile & WAR
+      copy:
+        src: "{{ item }}"
+        dest: /home/ansible/app/
+      loop:
+        - Dockerfile
+        - target/myapp.war
 
-      # Step 3: Install Maven
-      - name: Install Maven
-        run: sudo apt-get update && sudo apt-get install maven -y
+    - name: Build Docker image
+      command: docker build -t mytomcat /home/ansible/app
 
-      # Step 4: Build WAR file
-      - name: Build WAR
-        run: mvn clean package
+    - name: Stop old container if exists
+      command: docker stop tomcat_container || true
+      ignore_errors: yes
 
-      # Step 5: Copy files to Control Node
-      - name: Copy files to Control Node
-        run: |
-          scp -o StrictHostKeyChecking=no -r . ansible@CONTROL_NODE_IP:/home/ansible/app
-        env:
-          ANSIBLE_SSH_PRIVATE_KEY: ${{ secrets.CONTROL_NODE_KEY }}
+    - name: Remove old container if exists
+      command: docker rm tomcat_container || true
+      ignore_errors: yes
 
-      # Step 6: Run Ansible Playbook on Control Node
-      - name: Deploy with Ansible
-        run: |
-          ssh -o StrictHostKeyChecking=no ansible@CONTROL_NODE_IP << 'EOF'
-          cd /home/ansible/app
-          ansible-playbook -i inventory.ini deploy.yml
-          EOF
-        env:
-          ANSIBLE_SSH_PRIVATE_KEY: ${{ secrets.CONTROL_NODE_KEY }}
+    - name: Run Docker container
+      command: docker run -d -p 8080:8080 --name tomcat_container mytomcat
