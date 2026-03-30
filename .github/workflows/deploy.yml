@@ -1,4 +1,4 @@
-name: Build and Deploy Java Webapp
+name: CI/CD Tomcat Docker Deployment
 
 on:
   push:
@@ -6,48 +6,92 @@ on:
       - main
 
 jobs:
-  build-and-deploy:
+  build_and_deploy:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. Checkout your repo
-    - name: Checkout Code
+    # Step 1: Checkout repository
+    - name: Checkout code
       uses: actions/checkout@v3
 
-    # 2. Set up JDK
-    - name: Set up JDK 11
+    # Step 2: Set up Java 11
+    - name: Set up Java 11
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
-        java-version: 11
+        distribution: 'temurin'
+        java-version: '11'
 
-    # 3. Build the WAR with Maven
+    # Step 3: Install Maven & Docker
+    - name: Install Maven & Docker
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y maven docker.io
+        docker --version
+        mvn --version
+
+    # Step 4: Build WAR file
     - name: Build WAR
       run: |
         mvn clean package -DskipTests
-        ls -l target/  # verify myapp.war exists
+        if [ ! -f target/myapp.war ]; then
+          echo "ERROR: WAR file not found!"
+          exit 1
+        fi
+        ls -l target/  # Verify the WAR exists
 
-    # 4. Build Docker image
-    - name: Build Docker Image
+    # Step 5: Build Docker image
+    - name: Build Docker image
       run: |
         docker build -t mytomcat:latest .
 
-    # 5. (Optional) Push Docker image to Docker Hub or ECR
-    # - name: Log in to Docker Hub
-    #   uses: docker/login-action@v2
-    #   with:
-    #     username: ${{ secrets.DOCKER_USERNAME }}
-    #     password: ${{ secrets.DOCKER_PASSWORD }}
-    #
-    # - name: Push Docker Image
-    #   run: docker push mytomcat:latest
+    # Step 6: Login to Docker Hub
+    - name: Docker login
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
 
-    # 6. (Optional) Deploy WAR via SCP to EC2
-    - name: Deploy WAR to EC2
+    # Step 7: Push Docker image to Docker Hub
+    - name: Push Docker image
+      run: |
+        docker tag mytomcat:latest ${{ secrets.DOCKER_USERNAME }}/mytomcat:latest
+        docker push ${{ secrets.DOCKER_USERNAME }}/mytomcat:latest
+
+    # Step 8: Setup SSH key for EC2
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+    # Step 9: Copy WAR or deployment playbook to EC2
+    - name: Copy WAR to EC2
       uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ${{ secrets.EC2_USER }}
-        key: ${{ secrets.EC2_KEY }}
+        key: ${{ secrets.EC2_SSH_KEY }}
         source: "target/myapp.war"
         target: "/home/ubuntu/myapp.war"
+        rm: false
+
+    - name: Copy Ansible playbook to EC2
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        source: "main/src/deploy.yml"
+        target: "/etc/ansible/deploy.yml"
+        rm: false
+
+    # Step 10: Run Ansible playbook on EC2
+    - name: Run deployment
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          ansible-playbook /etc/ansible/deploy.yml
