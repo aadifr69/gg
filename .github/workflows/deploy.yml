@@ -66,24 +66,7 @@ jobs:
         docker tag mytomcat:latest ${{ secrets.DOCKER_USERNAME }}/mytomcat:latest
         docker push ${{ secrets.DOCKER_USERNAME }}/mytomcat:latest
 
-    # Step 8: Setup SSH key for EC2
-    - name: Setup SSH
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_ed25519
-        chmod 600 ~/.ssh/id_ed25519
-        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-
-    # Step 9: Copy WAR or deployment playbook to EC2
-    - name: Copy WAR to EC2
-      uses: appleboy/scp-action@v0.1.7
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USER }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        source: "target/myapp.war"
-        target: "/home/ubuntu/myapp.war"
-        rm: false
+   
 
     - name: Copy Ansible playbook to EC2
       uses: appleboy/scp-action@v0.1.7
@@ -91,7 +74,7 @@ jobs:
         host: ${{ secrets.EC2_HOST }}
         username: ${{ secrets.EC2_USER }}
         key: ${{ secrets.EC2_SSH_KEY }}
-        source: "main/src/deploy.yml"
+        source: " deploy.yml"
         target: "/etc/ansible/"
         rm: false
 
