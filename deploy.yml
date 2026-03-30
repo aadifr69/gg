@@ -1,0 +1,35 @@
+- name: Deploy Tomcat
+  hosts: managed
+  become: yes
+
+  tasks:
+    - name: Install Docker
+      yum:
+        name: docker
+        state: present
+
+    - name: Start Docker
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Create app directory
+      file:
+        path: /home/ansible/app
+        state: directory
+
+    - name: Copy files
+      copy:
+        src: "{{ item }}"
+        dest: /home/ansible/app/
+      loop:
+        - Dockerfile
+        - target/myapp.war
+
+    - name: Build Docker image
+      command: docker build -t mytomcat /home/ansible/app
+
+    - name: Run container
+      command: docker run -d -p 8080:8080 --name tomcat_container mytomcat
+      ignore_errors: yes
