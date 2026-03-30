@@ -32,7 +32,7 @@ jobs:
       # Step 5: Copy files to Control Node
       - name: Copy files to Control Node
         run: |
-          scp -o StrictHostKeyChecking=no -r . ansible@CONTROL_NODE_IP:/home/ansible/app
+          scp -o StrictHostKeyChecking=no -r . ansible@52.12.100.223:/home/ansible/app
         env:
           ANSIBLE_SSH_PRIVATE_KEY: ${{ secrets.CONTROL_NODE_KEY }}
 
