@@ -11,7 +11,7 @@ jobs:
 
     steps:
     # Step 1: Checkout repository
-    - name: Checkout repository
+    - name: Checkout code
       uses: actions/checkout@v3
 
     # Step 2: Set up Java 11
@@ -21,18 +21,11 @@ jobs:
         distribution: 'temurin'
         java-version: '11'
 
-    # Step 3: Install Maven and Docker (fixed)
-    - name: Install Maven and Docker
+    # Step 3: Install Maven & Docker
+    - name: Install Maven & Docker
       run: |
         sudo apt-get update
-        sudo apt-get install -y maven apt-transport-https ca-certificates curl software-properties-common lsb-release gnupg
-        # Docker GPG key and repo
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-        sudo apt-get update
-        sudo apt-get install -y docker-ce docker-ce-cli containerd.io
-        docker --version
-        mvn -version
+        sudo apt-get install -y maven docker.io
 
     # Step 4: Build WAR file
     - name: Build WAR
@@ -71,11 +64,10 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         key: ${{ secrets.EC2_SSH_KEY }}
         source: "main/src/deploy.yml"
-        target: "/etc/ansible/hosts"
-        strip_components: 1
+        target: "/etc/ansible/deploy.yml"
 
     # Step 10: Run Ansible playbook on EC2
-    - name: Deploy via Ansible
+    - name: Run deployment
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.EC2_HOST }}
