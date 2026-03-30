@@ -29,19 +29,23 @@ jobs:
       - name: Build WAR
         run: mvn clean package
 
-      # Step 5: Copy files to Control Node
+      # Step 5: Setup SSH key
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H 52.12.100.223 >> ~/.ssh/known_hosts
+
+      # Step 6: Copy files to Control Node
       - name: Copy files to Control Node
         run: |
-          scp -o StrictHostKeyChecking=no -r . ansible@52.12.100.223:/home/ansible/app
-        env:
-          ANSIBLE_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          scp -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -r . ansible@52.12.100.223:/home/ansible/app
 
-      # Step 6: Run Ansible Playbook on Control Node
+      # Step 7: Run Ansible Playbook
       - name: Deploy with Ansible
         run: |
-          ssh -o StrictHostKeyChecking=no ansible@52.12.100.223 << 'EOF'
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no ansible@52.12.100.223 << 'EOF'
           cd /home/ansible/app
           ansible-playbook -i inventory.ini deploy.yml
           EOF
-        env:
-          ANSIBLE_SSH_PRIVATE_KEY: ${{ secrets.CONTROL_NODE_KEY }}
