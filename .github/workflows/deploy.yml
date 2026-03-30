@@ -39,7 +39,7 @@ jobs:
       # Step 6: Run Ansible Playbook on Control Node
       - name: Deploy with Ansible
         run: |
-          ssh -o StrictHostKeyChecking=no ansible@CONTROL_NODE_IP << 'EOF'
+          ssh -o StrictHostKeyChecking=no ansible@52.12.100.223 << 'EOF'
           cd /home/ansible/app
           ansible-playbook -i inventory.ini deploy.yml
           EOF
