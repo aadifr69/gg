@@ -21,26 +21,21 @@ jobs:
           distribution: 'temurin'
           java-version: '11'
 
-      # Step 3: Install Maven and Docker (fixed for Ubuntu 24.04)
+      # Step 3: Install Maven & Docker
       - name: Install Maven and Docker
         run: |
-          # Maven dependencies
           sudo apt-get update
-          sudo apt-get install -y maven apt-transport-https ca-certificates curl software-properties-common gnupg lsb-release
-
-          # Docker GPG key
-          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-
-          # Docker repository
-          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-          # Install Docker CE
-          sudo apt-get update
-          sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+          sudo apt-get install -y maven docker.io
 
       # Step 4: Build WAR file
       - name: Build WAR
-        run: mvn clean package
+        run: |
+          mvn clean package
+          ls -l target/  # verify myapp.war exists
+          if [ ! -f target/myapp.war ]; then
+            echo "WAR file not found! Build failed."
+            exit 1
+          fi
 
       # Step 5: Build Docker image
       - name: Build Docker image
@@ -67,7 +62,7 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.EC2_IP }} >> ~/.ssh/known_hosts
 
-      # Step 9: Copy Ansible playbook to EC2
+      # Step 9: Copy playbook to EC2
       - name: Copy playbook to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -75,7 +70,7 @@ jobs:
           username: ansible
           key: ${{ secrets.EC2_SSH_KEY }}
           source: "deploy.yml"
-          target: "/home/ansible/"
+          target: "/home/ansible/deploy.yml"
 
       # Step 10: Run Ansible playbook on EC2
       - name: Run Ansible Playbook
@@ -85,5 +80,4 @@ jobs:
           username: ansible
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd /home/ansible
-            ansible-playbook deploy.yml
+            ansible-playbook /home/ansible/deploy.yml
