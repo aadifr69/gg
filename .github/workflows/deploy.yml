@@ -11,7 +11,7 @@ jobs:
 
     steps:
       # Step 1: Checkout repository
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v3
 
       # Step 2: Set up Java 11
@@ -21,19 +21,26 @@ jobs:
           distribution: 'temurin'
           java-version: '11'
 
-      # Step 3: Install Maven and Docker
+      # Step 3: Install Maven and Docker (fixed for Ubuntu 24.04)
       - name: Install Maven and Docker
         run: |
+          # Maven dependencies
           sudo apt-get update
-          sudo apt-get install -y maven docker.io
+          sudo apt-get install -y maven apt-transport-https ca-certificates curl software-properties-common gnupg lsb-release
+
+          # Docker GPG key
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+
+          # Docker repository
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+          # Install Docker CE
+          sudo apt-get update
+          sudo apt-get install -y docker-ce docker-ce-cli containerd.io
 
       # Step 4: Build WAR file
       - name: Build WAR
         run: mvn clean package
-
-      # Step 4.1: Check WAR file exists
-      - name: List target folder
-        run: ls -l target/
 
       # Step 5: Build Docker image
       - name: Build Docker image
@@ -71,11 +78,12 @@ jobs:
           target: "/home/ansible/"
 
       # Step 10: Run Ansible playbook on EC2
-      - name: Run Ansible playbook
+      - name: Run Ansible Playbook
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_IP }}
           username: ansible
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            ansible-playbook /home/ansible/deploy.yml
+            cd /home/ansible
+            ansible-playbook deploy.yml
